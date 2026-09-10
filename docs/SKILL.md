@@ -5,7 +5,7 @@ description: How to extend the "Just Move the Button" interactive comic — add 
 
 # Just Move the Button — working on this project
 
-An interactive comic (guess → reveal, one page at a time) that shows non-technical people the invisible work behind a "simple" software change. Comic-book style: bold ink, halftone, captions, SFX, splash panels. The reader picks a hero and follows their bad Tuesday.
+An interactive comic (guess → reveal, one page at a time) that shows non-technical people the invisible work behind a "simple" software change. Comic-book style: bold ink, halftone, captions, SFX, splash panels. The reader follows Maya through her bad Tuesday.
 
 ## Layout
 ```
