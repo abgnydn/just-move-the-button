@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Generate 1200x630 OG/social image at assets/og.png (comic style, Pillow only).
+"""Generate 1200x630 OG/social image at assets/og.png, mirroring the live cover.
+
+Mirrors div.coverart (src/engine.js:28-31) styled by src/comic.css:110-113:
+full-bleed red bg + halftone dots, yellow title top-left, Maya right,
+yellow SFX bottom-left, white issue tag, ink frame. Pillow only.
 Usage: python3 tools/make_og.py
 """
-import math
 import pathlib
 from PIL import Image, ImageDraw, ImageFont
 
@@ -11,10 +14,12 @@ OUT = ROOT / "assets" / "og.png"
 SRC = ROOT / "assets" / "maya" / "pose-alarm.png"
 
 W, H = 1200, 630
-PAPER = "#F3EBD6"
-RED = "#E5322B"
-YELLOW = "#FFD22E"
-INK = "#111111"
+RED = (0xE5, 0x32, 0x2B, 255)
+YELLOW = (0xFF, 0xD2, 0x2E, 255)
+INK = (0x11, 0x11, 0x11, 255)
+WHITE = (255, 255, 255, 255)
+# Red blended 20% toward ink: approximates ink dots at opacity .2 over red.
+DOT = (int(0xE5 * 0.8 + 0x11 * 0.2), int(0x32 * 0.8 + 0x11 * 0.2), int(0x2B * 0.8 + 0x11 * 0.2), 255)
 
 BOLD_CANDIDATES = [
     "Bangers-Regular.ttf",
@@ -38,110 +43,114 @@ def load_font(size):
     return ImageFont.load_default()
 
 
-def burst_points(cx, cy, rx_out, ry_out, rx_in, ry_in, spikes=16):
-    pts = []
-    for i in range(spikes * 2):
-        ang = math.pi * i / spikes - math.pi / 2
-        rx, ry = (rx_out, ry_out) if i % 2 == 0 else (rx_in, ry_in)
-        pts.append((cx + rx * math.cos(ang), cy + ry * math.sin(ang)))
-    return pts
-
-
-def wrap(draw, text, font, max_w):
-    words = text.split()
-    lines, cur = [], ""
-    for w in words:
-        trial = (cur + " " + w).strip()
-        if draw.textlength(trial, font=font) <= max_w or not cur:
-            cur = trial
-        else:
-            lines.append(cur)
-            cur = w
-    if cur:
-        lines.append(cur)
-    return lines
+def draw_outlined(d, xy, text, font, fill=YELLOW, outline=INK, sw=3, shadow=(6, 6)):
+    x, y = xy
+    if shadow is not None:
+        d.text((x + shadow[0], y + shadow[1]), text, font=font, fill=outline)
+    for dx in range(-sw, sw + 1):
+        for dy in range(-sw, sw + 1):
+            if dx == 0 and dy == 0:
+                continue
+            if dx * dx + dy * dy > sw * sw:
+                continue
+            d.text((x + dx, y + dy), text, font=font, fill=outline)
+    d.text((x, y), text, font=font, fill=fill)
 
 
 def main():
-    img = Image.new("RGB", (W, H), PAPER)
+    img = Image.new("RGBA", (W, H), RED)
     d = ImageDraw.Draw(img)
 
-    # Red halftone dots band (bottom strip).
-    band_y = 500
-    d.rectangle([0, band_y, W, H], fill=RED)
-    d.line([0, band_y, W, band_y], fill=INK, width=4)
-    dot_fill = PAPER
-    spacing, r = 20, 4
+    # Full-bleed ink halftone dots overlay (grid approx of .half, opacity .2).
+    spacing, r = 14, 2
     row = 0
-    y = band_y + 12
+    y = spacing // 2
     while y < H:
         xoff = (spacing // 2) if row % 2 else 0
-        x = 12 + xoff
+        x = spacing // 2 + xoff
         while x < W:
-            d.ellipse([x - r, y - r, x + r, y + r], fill=dot_fill)
+            d.ellipse([x - r, y - r, x + r, y + r], fill=DOT)
             x += spacing
         y += spacing
         row += 1
 
-    # Yellow title burst with ink border + hard shadow.
-    cx, cy = 385, 225
-    pts = burst_points(cx, cy, 370, 160, 325, 122, spikes=16)
-    shadow = [(x + 10, y + 10) for x, y in pts]
-    d.polygon(shadow, fill=INK)
-    d.polygon(pts, fill=YELLOW, outline=INK)
-    # 4px outline: redraw scaled outline via line loop.
-    d.line(pts + [pts[0]], fill=INK, width=4, joint="curve")
+    # Hero right: height ~605px (96%), ~6% right margin, bottom-anchored (-8px bleed).
+    maya = Image.open(SRC).convert("RGBA")
+    target_h = 605
+    if maya.height != target_h:
+        maya = maya.resize((int(maya.width * target_h / maya.height), target_h), Image.LANCZOS)
+    hx = W - maya.width - int(W * 0.06)
+    hy = H - maya.height + 8
+    shadow = Image.new("RGBA", maya.size, INK)
+    shadow.putalpha(maya.split()[3])
+    img.paste(shadow, (hx + 6, hy + 6), shadow)
+    img.paste(maya, (hx, hy), maya)
 
-    # Big title (two lines, auto-fit inside burst).
+    # Small tag top-left above title: white box, ink 3px border.
+    f_tag = load_font(26)
+    tag = "ISSUE #1 \u00b7 A FIVE-MINUTE JOB"
+    tb = d.textbbox((0, 0), tag, font=f_tag)
+    tw, th = tb[2] - tb[0], tb[3] - tb[1]
+    pad_x, pad_y, sh = 14, 8, 4
+    tag_w, tag_h = tw + pad_x * 2, th + pad_y * 2
+    tag_layer = Image.new("RGBA", (tag_w + sh + 8, tag_h + sh + 8), (0, 0, 0, 0))
+    td = ImageDraw.Draw(tag_layer)
+    td.rectangle([sh, sh, sh + tag_w, sh + tag_h], fill=INK)
+    td.rectangle([0, 0, tag_w, tag_h], fill=WHITE, outline=INK, width=3)
+    td.text((pad_x - tb[0], pad_y - tb[1]), tag, font=f_tag, fill=INK)
+    tag_layer = tag_layer.rotate(2, expand=True, resample=Image.BICUBIC)
+    img.paste(tag_layer, (60, 36), tag_layer)
+
+    # Title top-left: two yellow lines, ink stroke + drop shadow, rotated -3deg.
     lines = ["JUST MOVE", "THE BUTTON"]
-    size = 76
-    while size > 40:
+    probe = ImageDraw.Draw(Image.new("RGBA", (8, 8)))
+    size = 120
+    max_w = hx - 60 - 30
+    while size > 48:
         f_try = load_font(size)
-        if max(d.textlength(ln, font=f_try) for ln in lines) <= 500:
+        if max(probe.textlength(ln, font=f_try) for ln in lines) <= max_w:
             break
         size -= 4
     f_title = load_font(size)
+    widths = [probe.textlength(ln, font=f_title) for ln in lines]
+    bboxes = [probe.textbbox((0, 0), ln, font=f_title) for ln in lines]
+    heights = [b[3] - b[1] for b in bboxes]
+    lh = int(size * 0.9)
+    tpad, tsh = 20, 6
+    title_w = int(max(widths)) + tpad * 2 + tsh + 8
+    title_h = lh * len(lines) + tpad * 2 + tsh + 8
+    title_layer = Image.new("RGBA", (title_w, title_h), (0, 0, 0, 0))
+    tld = ImageDraw.Draw(title_layer)
     for i, line in enumerate(lines):
-        tw = d.textlength(line, font=f_title)
-        # ascent/descent for vertical centering of the two-line block
-        bbox = d.textbbox((0, 0), line, font=f_title)
-        th = bbox[3] - bbox[1]
-        ly = cy - th - 6 + i * (th + 12)
-        d.text((cx - tw / 2, ly), line, font=f_title, fill=INK)
+        draw_outlined(tld, (tpad - bboxes[i][0], tpad - bboxes[i][1] + i * lh),
+                      line, f_title, fill=YELLOW, outline=INK, sw=3, shadow=(6, 6))
+    _ = heights
+    title_layer = title_layer.rotate(-3, expand=True, resample=Image.BICUBIC)
+    img.paste(title_layer, (56, 104), title_layer)
 
-    # Subtitle badge: white box, 4px ink border, hard shadow.
-    f_sub = load_font(30)
-    sub = "Issue #1 \u00b7 A five-minute job"
-    sw = d.textlength(sub, font=f_sub)
-    sbbox = d.textbbox((0, 0), sub, font=f_sub)
-    sh = sbbox[3] - sbbox[1]
-    pad_x, pad_y = 18, 10
-    bx0, by0 = 60, 372
-    bx1, by1 = bx0 + sw + pad_x * 2, by0 + sh + pad_y * 2
-    d.rectangle([bx0 + 7, by0 + 7, bx1 + 7, by1 + 7], fill=INK)
-    d.rectangle([bx0, by0, bx1, by1], fill="white", outline=INK, width=4)
-    d.text((bx0 + pad_x, by0 + pad_y - 2), sub, font=f_sub, fill=INK)
+    # SFX bottom-left: yellow with ink outline, rotated -8deg, ~44px.
+    f_sfx = load_font(44)
+    sfx_lines = ["IT'S JUST", "ONE WORD!"]
+    sb = [probe.textbbox((0, 0), ln, font=f_sfx) for ln in sfx_lines]
+    sws = [b[2] - b[0] for b in sb]
+    slh = int(44 * 0.95)
+    spad, ssh = 16, 4
+    sfx_w = int(max(sws)) + spad * 2 + ssh + 8
+    sfx_h = slh * len(sfx_lines) + spad * 2 + ssh + 8
+    sfx_layer = Image.new("RGBA", (sfx_w, sfx_h), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(sfx_layer)
+    for i, line in enumerate(sfx_lines):
+        draw_outlined(sd, (spad - sb[i][0], spad - sb[i][1] + i * slh),
+                      line, f_sfx, fill=YELLOW, outline=INK, sw=2, shadow=(4, 4))
+    sfx_layer = sfx_layer.rotate(-8, expand=True, resample=Image.BICUBIC)
+    img.paste(sfx_layer, (60, H - sfx_layer.height - 50), sfx_layer)
 
-    # Small description, wrapped.
-    f_small = load_font(24)
-    desc = "An interactive comic about the invisible work behind a five-minute change."
-    for j, ln in enumerate(wrap(d, desc, f_small, 660)):
-        d.text((60, 438 + j * 32), ln, font=f_small, fill=INK)
-
-    # Maya on the right, fit height ~560px.
-    maya = Image.open(SRC).convert("RGBA")
-    target_h = 560
-    if maya.height != target_h:
-        maya = maya.resize((int(maya.width * target_h / maya.height), target_h), Image.LANCZOS)
-    mx = W - maya.width - 36
-    my = (H - maya.height) // 2 - 6
-    img.paste(maya, (mx, my), maya)
-
-    # Outer ink frame.
+    # Outer 4px ink frame.
+    d = ImageDraw.Draw(img)
     d.rectangle([2, 2, W - 3, H - 3], outline=INK, width=4)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    img.save(OUT, "PNG", optimize=True)
+    img.convert("RGB").save(OUT, "PNG", optimize=True)
     print(f"wrote {OUT} ({OUT.stat().st_size // 1024} KB)")
 
 
