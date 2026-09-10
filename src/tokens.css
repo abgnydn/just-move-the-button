@@ -1,0 +1,12 @@
+/* Design tokens — the only place colours, type and rhythm are defined. Edit here, everything follows. */
+:root{
+  --ink:#111; --paper:#F3EBD6; --white:#fff;
+  --yel:#FFD22E; --red:#E5322B; --blue:#2A6BE0; --cyan:#38C6E8; --mag:#F04E98; --green:#3DBE7A;
+  --line:4px; --line-thin:3px; --shadow:5px 5px 0 var(--ink); --shadow-sm:3px 3px 0 var(--ink);
+  --f-display:"Bangers",cursive; --f-body:"Barlow Semi Condensed",sans-serif;
+  --fs-body:17px; --fs-cap:14px; --fs-bubble:20px; --fs-sfx:clamp(40px,8vw,72px); --fs-title:clamp(36px,7vw,64px);
+  --gap:12px; --pad:16px; --page-w:760px; --panel-h:230px; --splash-h:330px;
+  --dot:1.4px; --dot-gap:7px;
+  --ease-pop:cubic-bezier(.2,1.6,.4,1); --t-fast:.25s; --t-mid:.35s; --t-slow:1s;
+}
+@media (prefers-reduced-motion:reduce){:root{--t-fast:0s;--t-mid:0s;--t-slow:0s}}
