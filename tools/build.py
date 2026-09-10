@@ -3,7 +3,7 @@
 Usage: python3 tools/build.py            -> dist/index.html
        python3 tools/build.py --maxh 520 -> downscale embedded images to this height (default 640)
 """
-import base64, io, re, sys, pathlib
+import base64, io, re, shutil, sys, pathlib
 from PIL import Image
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 maxh = int(sys.argv[sys.argv.index('--maxh')+1]) if '--maxh' in sys.argv else 640
@@ -30,4 +30,5 @@ html = (ROOT/'index.html').read_text()
 html = re.sub(r'<link rel="stylesheet" href="src/tokens.css">\s*<link rel="stylesheet" href="src/comic.css">', f'<style>\n{css}\n</style>', html)
 html = html.replace('<script type="module" src="src/engine.js"></script>', f'<script>\n(function(){{\n{js}\n}})();\n</script>')
 out = ROOT/'dist/index.html'; out.parent.mkdir(parents=True, exist_ok=True); out.write_text(html)
+shutil.copy(ROOT/'assets/og.png', ROOT/'dist/og.png')
 print(f'wrote {out} ({out.stat().st_size//1024} KB)')
