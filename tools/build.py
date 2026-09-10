@@ -29,5 +29,5 @@ css = (ROOT/'src/tokens.css').read_text() + '\n' + (ROOT/'src/comic.css').read_t
 html = (ROOT/'index.html').read_text()
 html = re.sub(r'<link rel="stylesheet" href="src/tokens.css">\s*<link rel="stylesheet" href="src/comic.css">', f'<style>\n{css}\n</style>', html)
 html = html.replace('<script type="module" src="src/engine.js"></script>', f'<script>\n(function(){{\n{js}\n}})();\n</script>')
-out = ROOT/'dist/index.html'; out.write_text(html)
+out = ROOT/'dist/index.html'; out.parent.mkdir(parents=True, exist_ok=True); out.write_text(html)
 print(f'wrote {out} ({out.stat().st_size//1024} KB)')
